@@ -131,8 +131,8 @@ class Player(pygame.sprite.Sprite):
         self.rect = self.sprite.get_rect(topleft=(self.rect.x, self.rect.y))
         self.mask = pygame.mask.from_surface(self.sprite)
     
-    def draw(self, win):
-        win.blit(self.sprite, (self.rect.x, self.rect.y))
+    def draw(self, win, offset_x):
+        win.blit(self.sprite, (self.rect.x - offset_x, self.rect.y))
 
 
 class Object(pygame.sprite.Sprite):
@@ -144,8 +144,8 @@ class Object(pygame.sprite.Sprite):
         self.height = height
         self.name = name
 
-    def draw(self, win):
-        win.blit(self.image, (self.rect.x, self.rect.y))
+    def draw(self, win, offset_x):
+        win.blit(self.image, (self.rect.x - offset_x, self.rect.y))
 
 
 class Block(Object):
@@ -169,14 +169,14 @@ def get_background(name):
     
     return tiles, image
 
-def draw(window, background, bg_image, player, objects):
+def draw(window, background, bg_image, player, objects, offset_x):
     for tile in background:
         window.blit(bg_image, tile)
 
     for obj in objects:
-        obj.draw(window)
+        obj.draw(window, offset_x)
 
-    player.draw(window)
+    player.draw(window, offset_x)
 
     pygame.display.update()
 
@@ -195,27 +195,29 @@ def handle_vertical_collision(player, objects, dy):
         collided_objects.append(obj)
     return collided_objects
 
-def handle_horizontal_collision(player, objects, dx):
-    collided_objects = []
+def collide(player, objects, dx):
+    player.move(dx, 0)
+    player.update()
+    collided_object = None
     for obj in objects:
-        if pygame.sprite.colide_mask(player, obj):
-            if dx > 0:
-                player.rect.right = obj.rect.left
-            elif dy < 0:
-                player.rect.left = obj.rect.right
+        if pygame.sprite.collide_mask(player, obj):
+            collided_object = obj
+            break
 
-        collided_objects.append(obj)
-    return collided_objects
-
-
+    player.move(-dx, 0)
+    player.update()
+    return collided_object
 
 def handle_move(player, objects):
     keys = pygame.key.get_pressed()
 
     player.x_vel = 0
-    if keys[pygame.K_LEFT]:
+    collide_left = collide(player, objects, -PLAYER_VEL * 2)
+    collide_right = collide(player, objects, PLAYER_VEL * 2)
+
+    if keys[pygame.K_LEFT] and not collide_left:
         player.move_left(PLAYER_VEL)
-    if keys[pygame.K_RIGHT]:
+    if keys[pygame.K_RIGHT] and not collide_right:
         player.move_right(PLAYER_VEL)
 
     handle_vertical_collision(player, objects, player.y_vel)
@@ -229,6 +231,10 @@ def main(window):
     player = Player(100, 100, 50, 50)
     floor = [Block(i * block_size, HEIGHT - block_size, block_size)
             for i in range(-WIDTH // block_size, WIDTH * 2 // block_size)]
+    objects = [*floor, Block(0, HEIGHT - block_size * 2, block_size), Block(block_size * 3, HEIGHT - block_size * 4, block_size)]
+
+    offset_x = 0
+    scroll_area_width = 200
 
     run = True
     while run:
@@ -244,8 +250,12 @@ def main(window):
                     player.jump()
 
         player.loop(FPS)
-        handle_move(player, floor)
-        draw(window, background, bg_image, player, floor)
+        handle_move(player, objects)
+        draw(window, background, bg_image, player, objects, offset_x)
+
+        if ((player.rect.right - offset_x  >= WIDTH - scroll_area_width) and player.x_vel > 0) or (
+                (player.rect.left - offset_x  <= scroll_area_width) and player.x_vel < 0):
+            offset_x += player.x_vel
     
     pygame.quit()
     quit()
